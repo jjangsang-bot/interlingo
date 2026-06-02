@@ -1,0 +1,10 @@
+category_slug,difficulty,unit_type,ko,en,ja,hint_keywords_en,hint_structure_en,first_letter_hint_en
+daily-life,beginner,word,사과,apple,りんご,apple,noun,a
+daily-life,intermediate,sentence,나는 공원 산책을 좋아한다.,I like taking walks in the park.,私は公園を散歩するのが好きです。,"like|walks|park","I + like + taking walks + place","I l..."
+daily-life,advanced,paragraph,"나는 주말마다 공원에 간다. 산책도 하고 음악도 듣는다. 그 시간이 스트레스 해소에 도움이 된다.","I go to the park every weekend. I take walks and listen to music. That time helps me relieve stress.","私は毎週末公園に行きます。散歩をしたり音楽を聞いたりします。その時間はストレス解消に役立ちます。","weekend|park|stress","subject + routine + activities + benefit","I g..."
+travel,beginner,word,여권,passport,パスポート,passport,noun,p
+travel,intermediate,sentence,공항까지 얼마나 걸리나요?,How long does it take to get to the airport?,空港までどのくらいかかりますか。,"how long|take|airport","How long + does it take + destination","H l..."
+food,beginner,word,물,water,水,water,noun,w
+business,intermediate,sentence,회의 시간을 변경할 수 있을까요?,Could we change the meeting time?,会議の時間を変更できますか。,"could|change|meeting time","Could we + verb + object","C w..."
+hobbies,intermediate,sentence,저는 주말에 사진 찍는 것을 좋아합니다.,I like taking photos on weekends.,週末に写真を撮るのが好きです。,"like|taking photos|weekends","I like + gerund + time","I l..."
+
