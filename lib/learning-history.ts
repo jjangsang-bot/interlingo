@@ -1,8 +1,13 @@
 export type LearningResult = "correct" | "partial" | "wrong" | "revealed";
 
 export type LearnedSentenceRecord = {
+  sentenceId: string;
   questionId: number;
   korean: string;
+  directionLabel: string;
+  promptText: string;
+  promptLanguage: string;
+  targetLanguage: string;
   userAnswer: string;
   recommendedAnswer: string;
   result: LearningResult;
@@ -28,8 +33,23 @@ export type CategoryAccuracy = {
   accuracy: number;
 };
 
+export type SentenceReviewState = {
+  sentenceId: string;
+  reviewLevel: number;
+  correctCount: number;
+  wrongCount: number;
+  nextReviewAt: string;
+  lastReviewedAt: string;
+};
+
 export const LEARNING_HISTORY_KEY = "interlingo.learningHistory.v1";
+export const SENTENCE_REVIEW_STATE_KEY = "interlingo.sentenceReviewState.v1";
 const LEARNING_HISTORY_EVENT = "interlingo-learning-history-change";
+const REVIEW_INTERVAL_DAYS = [1, 3, 7, 14];
+let cachedHistoryRaw: string | null = null;
+let cachedHistory: LearningSessionRecord[] = [];
+let cachedReviewStatesRaw: string | null = null;
+let cachedReviewStates: Record<string, SentenceReviewState> = {};
 
 export function getTodayKey(now = new Date()) {
   const year = now.getFullYear();
@@ -81,14 +101,23 @@ export function loadLearningHistory() {
     const rawHistory = window.localStorage.getItem(LEARNING_HISTORY_KEY);
 
     if (!rawHistory) {
+      cachedHistoryRaw = null;
+      cachedHistory = [];
       return [];
+    }
+
+    if (rawHistory === cachedHistoryRaw) {
+      return cachedHistory;
     }
 
     const parsedHistory = JSON.parse(rawHistory);
 
-    return Array.isArray(parsedHistory)
+    cachedHistoryRaw = rawHistory;
+    cachedHistory = Array.isArray(parsedHistory)
       ? (parsedHistory as LearningSessionRecord[])
       : [];
+
+    return cachedHistory;
   } catch {
     return [];
   }
@@ -110,6 +139,7 @@ export function clearLearningHistory() {
   }
 
   window.localStorage.removeItem(LEARNING_HISTORY_KEY);
+  window.localStorage.removeItem(SENTENCE_REVIEW_STATE_KEY);
   notifyLearningHistoryChanged();
 }
 
@@ -198,12 +228,97 @@ export function getCategoryAccuracies(history: LearningSessionRecord[]) {
     .sort((left, right) => left.accuracy - right.accuracy);
 }
 
-export function getTodayReviewCount(history: LearningSessionRecord[]) {
-  const latestSession = history[0];
+export function createSentenceId(category: string, questionId: number) {
+  return `${category}:${questionId}`;
+}
 
-  if (!latestSession) {
-    return 10;
+export function loadSentenceReviewStates() {
+  if (typeof window === "undefined") {
+    return {};
   }
 
-  return latestSession.wrongCount + latestSession.partialCount;
+  try {
+    const rawStates = window.localStorage.getItem(SENTENCE_REVIEW_STATE_KEY);
+
+    if (!rawStates) {
+      cachedReviewStatesRaw = null;
+      cachedReviewStates = {};
+      return {};
+    }
+
+    if (rawStates === cachedReviewStatesRaw) {
+      return cachedReviewStates;
+    }
+
+    const parsedStates = JSON.parse(rawStates);
+
+    cachedReviewStatesRaw = rawStates;
+    cachedReviewStates = parsedStates && typeof parsedStates === "object"
+      ? (parsedStates as Record<string, SentenceReviewState>)
+      : {};
+
+    return cachedReviewStates;
+  } catch {
+    return {};
+  }
+}
+
+export function getTodayReviewCount(
+  reviewStates: Record<string, SentenceReviewState>
+) {
+  return Object.values(reviewStates).filter((state) => isReviewDue(state)).length;
+}
+
+export function isReviewDue(state: SentenceReviewState | undefined, now = new Date()) {
+  if (!state) {
+    return false;
+  }
+
+  return state.nextReviewAt <= getTodayKey(now);
+}
+
+export function updateSentenceReviewState(params: {
+  sentenceId: string;
+  result: LearningResult;
+  now?: Date;
+}) {
+  if (typeof window === "undefined") {
+    return undefined;
+  }
+
+  const now = params.now ?? new Date();
+  const today = getTodayKey(now);
+  const currentStates = loadSentenceReviewStates();
+  const previousState = currentStates[params.sentenceId];
+  const isCorrect = params.result === "correct";
+  const isWrong = params.result === "wrong" || params.result === "revealed";
+  const reviewLevel = isCorrect
+    ? Math.min((previousState?.reviewLevel ?? 0) + 1, REVIEW_INTERVAL_DAYS.length)
+    : 0;
+  const intervalDays = isCorrect
+    ? REVIEW_INTERVAL_DAYS[reviewLevel - 1]
+    : 1;
+  const nextReviewDate = new Date(now);
+
+  nextReviewDate.setDate(nextReviewDate.getDate() + intervalDays);
+
+  const nextState: SentenceReviewState = {
+    sentenceId: params.sentenceId,
+    reviewLevel,
+    correctCount:
+      (previousState?.correctCount ?? 0) + (isCorrect ? 1 : 0),
+    wrongCount: (previousState?.wrongCount ?? 0) + (isWrong ? 1 : 0),
+    nextReviewAt: getTodayKey(nextReviewDate),
+    lastReviewedAt: today
+  };
+
+  const nextStates = {
+    ...currentStates,
+    [params.sentenceId]: nextState
+  };
+
+  window.localStorage.setItem(SENTENCE_REVIEW_STATE_KEY, JSON.stringify(nextStates));
+  notifyLearningHistoryChanged();
+
+  return nextState;
 }

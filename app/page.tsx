@@ -7,6 +7,7 @@ import {
   clearLearningHistory,
   getCategoryAccuracies,
   getTodayReviewCount,
+  loadSentenceReviewStates,
   loadLearningHistory,
   subscribeLearningHistory
 } from "../lib/learning-history";
@@ -25,8 +26,13 @@ export default function HomePage() {
     loadLearningHistory,
     () => []
   );
+  const reviewStates = useSyncExternalStore(
+    subscribeLearningHistory,
+    loadSentenceReviewStates,
+    () => ({})
+  );
 
-  const todayReviewCount = getTodayReviewCount(history);
+  const todayReviewCount = getTodayReviewCount(reviewStates);
   const streak = calculateLearningStreak(history);
   const categoryAccuracies = getCategoryAccuracies(history);
   const weakAreas =
@@ -64,7 +70,7 @@ export default function HomePage() {
           </Link>
         </div>
         <p className="mt-3 text-xs text-black/50">
-          최근 세션의 오답과 부분 정답을 오늘 복습 대상으로 계산합니다.
+          문장별 nextReviewAt이 오늘이거나 지난 문장을 복습 대상으로 계산합니다.
         </p>
       </section>
 

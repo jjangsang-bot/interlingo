@@ -26,6 +26,8 @@ Implemented:
 - Local answer grading with normalization, fuzzy matching, and partial-answer feedback
 - Session completion summary with totals, accuracy, learned sentences, wrong sentences, user answers, and recommended answers
 - localStorage learning history for saved sessions, dashboard stats, recent sessions, streaks, and dev reset
+- localStorage sentence review states with forgetting-curve intervals and due-first practice
+- Multilingual interleaving practice across Korean, English, and Japanese directions
 - Review scheduling utility
 - Answer normalization utility
 - MVP package setup

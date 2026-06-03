@@ -8,11 +8,24 @@ import {
 } from "../../lib/answer-normalize";
 import {
   createLearningSessionRecord,
+  createSentenceId,
+  isReviewDue,
   LearnedSentenceRecord,
   LearningResult,
-  saveLearningSession
+  loadSentenceReviewStates,
+  saveLearningSession,
+  updateSentenceReviewState
 } from "../../lib/learning-history";
-import { travelQuestions } from "../../lib/travel-questions";
+import {
+  getAnswersForLanguage,
+  getDirectionLabel,
+  getTranslation,
+  languageLabels,
+  StudyDirection,
+  studyDirections,
+  TravelQuestion,
+  travelQuestions
+} from "../../lib/travel-questions";
 
 type Result = "correct" | "partial" | "wrong" | "revealed" | null;
 
@@ -34,7 +47,54 @@ function getResultLabel(result: LearningResult) {
   return "오답";
 }
 
+function selectSessionQuestions(
+  reviewStates: ReturnType<typeof loadSentenceReviewStates>
+) {
+  const dueQuestions = travelQuestions.filter((question) =>
+    isReviewDue(reviewStates[createSentenceId(CATEGORY, question.id)])
+  );
+
+  if (dueQuestions.length > 0) {
+    return dueQuestions;
+  }
+
+  const newQuestions = travelQuestions.filter(
+    (question) => !reviewStates[createSentenceId(CATEGORY, question.id)]
+  );
+
+  return newQuestions.length > 0 ? newQuestions : travelQuestions;
+}
+
+function getDirectionForQuestion(index: number) {
+  return studyDirections[index % studyDirections.length];
+}
+
+function createAttempt(params: {
+  answer: string;
+  direction: StudyDirection;
+  question: TravelQuestion;
+  recommendedAnswer: string;
+  result: LearningResult;
+  similarity: number;
+}) {
+  return {
+    sentenceId: createSentenceId(CATEGORY, params.question.id),
+    questionId: params.question.id,
+    korean: params.question.korean,
+    directionLabel: getDirectionLabel(params.direction),
+    promptText: getTranslation(params.question, params.direction.source),
+    promptLanguage: languageLabels[params.direction.source],
+    targetLanguage: languageLabels[params.direction.target],
+    userAnswer: params.answer,
+    recommendedAnswer: params.recommendedAnswer,
+    result: params.result,
+    similarity: params.similarity
+  };
+}
+
 export default function LearnPage() {
+  const [sessionQuestions, setSessionQuestions] =
+    useState<TravelQuestion[]>(travelQuestions);
   const [questionIndex, setQuestionIndex] = useState(0);
   const [answer, setAnswer] = useState("");
   const [hintCount, setHintCount] = useState(0);
@@ -45,8 +105,22 @@ export default function LearnPage() {
   const [isComplete, setIsComplete] = useState(false);
   const hasSavedSession = useRef(false);
 
-  const question = travelQuestions[questionIndex];
+  const question = sessionQuestions[questionIndex];
+  const direction = getDirectionForQuestion(questionIndex);
+  const directionLabel = getDirectionLabel(direction);
+  const promptText = getTranslation(question, direction.source);
+  const targetAnswers = getAnswersForLanguage(question, direction.target);
+  const targetHints = question.hints[direction.target];
   const isAnswered = result !== null;
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setSessionQuestions(selectSessionQuestions(loadSentenceReviewStates()));
+      setQuestionIndex(0);
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     if (!isComplete || hasSavedSession.current || sessionAttempts.length === 0) {
@@ -69,45 +143,55 @@ export default function LearnPage() {
       return;
     }
 
-    const nextEvaluation = evaluateAnswer(answer, question.answers);
-    const nextAttempt: LearnedSentenceRecord = {
-      questionId: question.id,
-      korean: question.korean,
-      userAnswer: answer,
+    const nextEvaluation = evaluateAnswer(answer, targetAnswers);
+    const sentenceId = createSentenceId(CATEGORY, question.id);
+    const nextAttempt: LearnedSentenceRecord = createAttempt({
+      answer,
+      direction,
+      question,
       recommendedAnswer: nextEvaluation.matchedAnswer,
       result: nextEvaluation.result,
       similarity: nextEvaluation.similarity
-    };
+    });
 
     setEvaluation(nextEvaluation);
     setResult(nextEvaluation.result);
     setCurrentAttempt(nextAttempt);
     setSessionAttempts((attempts) => [...attempts, nextAttempt]);
+    updateSentenceReviewState({
+      sentenceId,
+      result: nextEvaluation.result
+    });
   }
 
   function showHint() {
-    setHintCount((count) => Math.min(count + 1, question.hints.length));
+    setHintCount((count) => Math.min(count + 1, targetHints.length));
   }
 
   function revealAnswer() {
     if (!isAnswered) {
-      const nextAttempt: LearnedSentenceRecord = {
-        questionId: question.id,
-        korean: question.korean,
-        userAnswer: answer,
-        recommendedAnswer: question.answers[0],
+      const sentenceId = createSentenceId(CATEGORY, question.id);
+      const nextAttempt: LearnedSentenceRecord = createAttempt({
+        answer,
+        direction,
+        question,
+        recommendedAnswer: targetAnswers[0],
         result: "revealed",
         similarity: 0
-      };
+      });
 
       setResult("revealed");
       setCurrentAttempt(nextAttempt);
       setSessionAttempts((attempts) => [...attempts, nextAttempt]);
+      updateSentenceReviewState({
+        sentenceId,
+        result: "revealed"
+      });
     }
   }
 
   function goToNextQuestion() {
-    if (questionIndex === travelQuestions.length - 1) {
+    if (questionIndex === sessionQuestions.length - 1) {
       setIsComplete(true);
       return;
     }
@@ -135,7 +219,7 @@ export default function LearnPage() {
         </header>
 
         <section className="py-6">
-          <p className="text-sm font-semibold text-plum">{CATEGORY} · 한국어 → 영어</p>
+          <p className="text-sm font-semibold text-plum">{CATEGORY} · 인터리빙</p>
           <p className="mt-2 text-lg font-bold">오늘의 복습을 마쳤습니다.</p>
 
           <div className="mt-5 grid grid-cols-2 gap-2">
@@ -183,7 +267,12 @@ export default function LearnPage() {
                       {getResultLabel(attempt.result)}
                     </p>
                   </div>
-                  <p className="mt-3 text-sm font-bold leading-relaxed">{attempt.korean}</p>
+                  <p className="mt-3 text-xs font-semibold text-plum">
+                    {attempt.directionLabel}
+                  </p>
+                  <p className="mt-1 text-sm font-bold leading-relaxed">
+                    {attempt.promptText}
+                  </p>
                   <div className="mt-3 space-y-2 text-sm leading-relaxed">
                     <div>
                       <p className="text-xs font-semibold text-black/50">사용자 답</p>
@@ -217,7 +306,12 @@ export default function LearnPage() {
                     className="rounded-md border border-coral/20 bg-coral/10 p-4"
                     key={attempt.questionId}
                   >
-                    <p className="text-sm font-bold leading-relaxed">{attempt.korean}</p>
+                    <p className="text-xs font-semibold text-plum">
+                      {attempt.directionLabel}
+                    </p>
+                    <p className="mt-1 text-sm font-bold leading-relaxed">
+                      {attempt.promptText}
+                    </p>
                     <div className="mt-3 space-y-2 text-sm leading-relaxed">
                       <div>
                         <p className="text-xs font-semibold text-black/50">사용자 답</p>
@@ -254,24 +348,26 @@ export default function LearnPage() {
             <h1 className="mt-1 text-xl font-bold">여행 문장 복습</h1>
           </div>
           <p className="text-sm font-bold text-plum">
-            {questionIndex + 1} / {travelQuestions.length}
+            {questionIndex + 1} / {sessionQuestions.length}
           </p>
         </div>
         <div className="mt-4 h-2 overflow-hidden rounded-full bg-black/10">
           <div
             className="h-full rounded-full bg-mint transition-all"
-            style={{ width: `${((questionIndex + 1) / travelQuestions.length) * 100}%` }}
+            style={{ width: `${((questionIndex + 1) / sessionQuestions.length) * 100}%` }}
           />
         </div>
       </header>
 
       <section className="flex flex-1 flex-col py-6">
-        <p className="text-sm font-semibold text-plum">한국어 → 영어</p>
-        <h2 className="mt-6 text-2xl font-bold leading-relaxed">{question.korean}</h2>
+        <p className="text-sm font-semibold text-plum">
+          {CATEGORY} · {directionLabel}
+        </p>
+        <h2 className="mt-6 text-2xl font-bold leading-relaxed">{promptText}</h2>
 
         <form className="mt-8" onSubmit={gradeAnswer}>
           <label className="text-sm font-semibold" htmlFor="answer">
-            영어로 답해 보세요
+            {languageLabels[direction.target]}로 답해 보세요
           </label>
           <textarea
             autoFocus
@@ -279,18 +375,18 @@ export default function LearnPage() {
             disabled={isAnswered}
             id="answer"
             onChange={(event) => setAnswer(event.target.value)}
-            placeholder="영어 문장을 입력하세요"
+            placeholder={`${languageLabels[direction.target]} 문장을 입력하세요`}
             value={answer}
           />
 
           <div className="mt-3 grid grid-cols-2 gap-2">
             <button
               className="h-11 rounded-md border border-plum/30 bg-plum/10 text-sm font-bold text-plum disabled:opacity-40"
-              disabled={hintCount === question.hints.length || isAnswered}
+              disabled={hintCount === targetHints.length || isAnswered}
               onClick={showHint}
               type="button"
             >
-              힌트 {hintCount > 0 ? `${hintCount}/${question.hints.length}` : ""}
+              힌트 {hintCount > 0 ? `${hintCount}/${targetHints.length}` : ""}
             </button>
             <button
               className="h-11 rounded-md border border-coral/30 bg-coral/10 text-sm font-bold text-coral disabled:opacity-40"
@@ -306,7 +402,7 @@ export default function LearnPage() {
             <div className="mt-4 rounded-md border border-plum/20 bg-plum/5 p-4">
               <p className="text-sm font-bold text-plum">힌트</p>
               <ol className="mt-2 space-y-1 text-sm leading-relaxed">
-                {question.hints.slice(0, hintCount).map((hint) => (
+                {targetHints.slice(0, hintCount).map((hint) => (
                   <li key={hint}>{hint}</li>
                 ))}
               </ol>
@@ -365,7 +461,7 @@ export default function LearnPage() {
             <div className="mt-4">
               <p className="text-xs font-semibold text-black/50">정답</p>
               <p className="mt-1 text-sm font-semibold leading-relaxed">
-                {currentAttempt?.recommendedAnswer ?? question.answers[0]}
+                {currentAttempt?.recommendedAnswer ?? targetAnswers[0]}
               </p>
             </div>
             <button
@@ -373,7 +469,7 @@ export default function LearnPage() {
               onClick={goToNextQuestion}
               type="button"
             >
-              {questionIndex === travelQuestions.length - 1 ? "결과 보기" : "다음 문제"}
+              {questionIndex === sessionQuestions.length - 1 ? "결과 보기" : "다음 문제"}
             </button>
           </section>
         )}
