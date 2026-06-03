@@ -1,14 +1,38 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import {
   AnswerEvaluation,
   evaluateAnswer
 } from "../../lib/answer-normalize";
+import {
+  createLearningSessionRecord,
+  LearnedSentenceRecord,
+  LearningResult,
+  saveLearningSession
+} from "../../lib/learning-history";
 import { travelQuestions } from "../../lib/travel-questions";
 
 type Result = "correct" | "partial" | "wrong" | "revealed" | null;
+
+const CATEGORY = "여행";
+
+function getResultLabel(result: LearningResult) {
+  if (result === "correct") {
+    return "정답";
+  }
+
+  if (result === "partial") {
+    return "부분 정답";
+  }
+
+  if (result === "revealed") {
+    return "정답 확인";
+  }
+
+  return "오답";
+}
 
 export default function LearnPage() {
   const [questionIndex, setQuestionIndex] = useState(0);
@@ -16,11 +40,27 @@ export default function LearnPage() {
   const [hintCount, setHintCount] = useState(0);
   const [result, setResult] = useState<Result>(null);
   const [evaluation, setEvaluation] = useState<AnswerEvaluation | null>(null);
-  const [correctCount, setCorrectCount] = useState(0);
+  const [currentAttempt, setCurrentAttempt] = useState<LearnedSentenceRecord | null>(null);
+  const [sessionAttempts, setSessionAttempts] = useState<LearnedSentenceRecord[]>([]);
   const [isComplete, setIsComplete] = useState(false);
+  const hasSavedSession = useRef(false);
 
   const question = travelQuestions[questionIndex];
   const isAnswered = result !== null;
+
+  useEffect(() => {
+    if (!isComplete || hasSavedSession.current || sessionAttempts.length === 0) {
+      return;
+    }
+
+    const sessionRecord = createLearningSessionRecord({
+      category: CATEGORY,
+      attempts: sessionAttempts
+    });
+
+    saveLearningSession(sessionRecord);
+    hasSavedSession.current = true;
+  }, [isComplete, sessionAttempts]);
 
   function gradeAnswer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -30,13 +70,19 @@ export default function LearnPage() {
     }
 
     const nextEvaluation = evaluateAnswer(answer, question.answers);
+    const nextAttempt: LearnedSentenceRecord = {
+      questionId: question.id,
+      korean: question.korean,
+      userAnswer: answer,
+      recommendedAnswer: nextEvaluation.matchedAnswer,
+      result: nextEvaluation.result,
+      similarity: nextEvaluation.similarity
+    };
 
     setEvaluation(nextEvaluation);
     setResult(nextEvaluation.result);
-
-    if (nextEvaluation.result === "correct") {
-      setCorrectCount((count) => count + 1);
-    }
+    setCurrentAttempt(nextAttempt);
+    setSessionAttempts((attempts) => [...attempts, nextAttempt]);
   }
 
   function showHint() {
@@ -45,7 +91,18 @@ export default function LearnPage() {
 
   function revealAnswer() {
     if (!isAnswered) {
+      const nextAttempt: LearnedSentenceRecord = {
+        questionId: question.id,
+        korean: question.korean,
+        userAnswer: answer,
+        recommendedAnswer: question.answers[0],
+        result: "revealed",
+        similarity: 0
+      };
+
       setResult("revealed");
+      setCurrentAttempt(nextAttempt);
+      setSessionAttempts((attempts) => [...attempts, nextAttempt]);
     }
   }
 
@@ -60,9 +117,16 @@ export default function LearnPage() {
     setHintCount(0);
     setResult(null);
     setEvaluation(null);
+    setCurrentAttempt(null);
   }
 
   if (isComplete) {
+    const sessionRecord = createLearningSessionRecord({
+      category: CATEGORY,
+      attempts: sessionAttempts
+    });
+    const wrongAttempts = sessionRecord.wrongSentences;
+
     return (
       <main className="mx-auto flex min-h-screen w-full max-w-md flex-col bg-paper px-5 py-6 text-ink">
         <header className="border-b border-black/10 pb-4">
@@ -70,11 +134,106 @@ export default function LearnPage() {
           <h1 className="mt-1 text-2xl font-bold">복습 완료</h1>
         </header>
 
-        <section className="flex flex-1 flex-col items-center justify-center py-12 text-center">
-          <p className="text-sm font-semibold text-plum">여행 · 한국어 → 영어</p>
-          <p className="mt-4 text-6xl font-bold text-mint">{correctCount}</p>
-          <p className="mt-2 text-sm text-black/60">10문제 중 정답</p>
-          <p className="mt-8 text-lg font-bold">오늘의 복습을 마쳤습니다.</p>
+        <section className="py-6">
+          <p className="text-sm font-semibold text-plum">{CATEGORY} · 한국어 → 영어</p>
+          <p className="mt-2 text-lg font-bold">오늘의 복습을 마쳤습니다.</p>
+
+          <div className="mt-5 grid grid-cols-2 gap-2">
+            <div className="rounded-md border border-black/10 bg-white p-4 shadow-sm">
+              <p className="text-xs font-semibold text-black/50">총 문제 수</p>
+              <p className="mt-1 text-2xl font-bold">{sessionRecord.totalCount}</p>
+            </div>
+            <div className="rounded-md border border-mint/20 bg-mint/10 p-4 shadow-sm">
+              <p className="text-xs font-semibold text-black/50">정답률</p>
+              <p className="mt-1 text-2xl font-bold text-mint">{sessionRecord.accuracy}%</p>
+            </div>
+            <div className="rounded-md border border-mint/20 bg-white p-4 shadow-sm">
+              <p className="text-xs font-semibold text-black/50">정답 수</p>
+              <p className="mt-1 text-2xl font-bold text-mint">{sessionRecord.correctCount}</p>
+            </div>
+            <div className="rounded-md border border-plum/20 bg-white p-4 shadow-sm">
+              <p className="text-xs font-semibold text-black/50">부분 정답 수</p>
+              <p className="mt-1 text-2xl font-bold text-plum">{sessionRecord.partialCount}</p>
+            </div>
+            <div className="rounded-md border border-coral/20 bg-white p-4 shadow-sm">
+              <p className="text-xs font-semibold text-black/50">오답 수</p>
+              <p className="mt-1 text-2xl font-bold text-coral">{sessionRecord.wrongCount}</p>
+            </div>
+          </div>
+
+          <section className="mt-8">
+            <h2 className="text-base font-bold">오늘 배운 문장</h2>
+            <div className="mt-3 space-y-3">
+              {sessionAttempts.map((attempt, index) => (
+                <article
+                  className="rounded-md border border-black/10 bg-white p-4 shadow-sm"
+                  key={attempt.questionId}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-bold text-black/40">{index + 1}</p>
+                    <p
+                      className={`rounded-full px-2 py-1 text-xs font-bold ${
+                        attempt.result === "correct"
+                          ? "bg-mint/10 text-mint"
+                          : attempt.result === "partial"
+                            ? "bg-plum/10 text-plum"
+                            : "bg-coral/10 text-coral"
+                      }`}
+                    >
+                      {getResultLabel(attempt.result)}
+                    </p>
+                  </div>
+                  <p className="mt-3 text-sm font-bold leading-relaxed">{attempt.korean}</p>
+                  <div className="mt-3 space-y-2 text-sm leading-relaxed">
+                    <div>
+                      <p className="text-xs font-semibold text-black/50">사용자 답</p>
+                      <p>{attempt.userAnswer || "입력 없이 정답을 확인함"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-black/50">추천 정답</p>
+                      <p className="font-semibold">{attempt.recommendedAnswer}</p>
+                    </div>
+                  </div>
+                  {attempt.result !== "revealed" && (
+                    <p className="mt-3 text-xs font-semibold text-black/50">
+                      문자열 유사도 {Math.round(attempt.similarity * 100)}%
+                    </p>
+                  )}
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="mt-8">
+            <h2 className="text-base font-bold">틀린 문장</h2>
+            <div className="mt-3 space-y-3">
+              {wrongAttempts.length === 0 ? (
+                <p className="rounded-md border border-mint/20 bg-mint/10 p-4 text-sm font-semibold text-mint">
+                  틀린 문장이 없습니다.
+                </p>
+              ) : (
+                wrongAttempts.map((attempt) => (
+                  <article
+                    className="rounded-md border border-coral/20 bg-coral/10 p-4"
+                    key={attempt.questionId}
+                  >
+                    <p className="text-sm font-bold leading-relaxed">{attempt.korean}</p>
+                    <div className="mt-3 space-y-2 text-sm leading-relaxed">
+                      <div>
+                        <p className="text-xs font-semibold text-black/50">사용자 답</p>
+                        <p>{attempt.userAnswer || "입력 없이 정답을 확인함"}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-black/50">추천 정답</p>
+                        <p className="font-semibold">{attempt.recommendedAnswer}</p>
+                      </div>
+                    </div>
+                  </article>
+                ))
+              )}
+            </div>
+          </section>
+
           <Link
             className="mt-8 flex h-12 w-full items-center justify-center rounded-md bg-mint text-sm font-bold text-white shadow-sm"
             href="/"
@@ -206,7 +365,7 @@ export default function LearnPage() {
             <div className="mt-4">
               <p className="text-xs font-semibold text-black/50">정답</p>
               <p className="mt-1 text-sm font-semibold leading-relaxed">
-                {question.answers[0]}
+                {currentAttempt?.recommendedAnswer ?? question.answers[0]}
               </p>
             </div>
             <button

@@ -2,6 +2,17 @@ export function normalizeAnswer(value: string) {
   return value
     .trim()
     .toLowerCase()
+    .replace(/[’]/g, "'")
+    .replace(/\b(i)'d\b/g, "$1 would")
+    .replace(/\b(you|we|they)'d\b/g, "$1 would")
+    .replace(/\b(he|she|it|that|there|what|who|where|when|why|how)'s\b/g, "$1 is")
+    .replace(/\b(i)'m\b/g, "$1 am")
+    .replace(/\b(you|we|they)'re\b/g, "$1 are")
+    .replace(/\b(i|you|we|they|he|she|it)'ll\b/g, "$1 will")
+    .replace(/\b(i|you|we|they|he|she|it)'ve\b/g, "$1 have")
+    .replace(/\bcan't\b/g, "cannot")
+    .replace(/\bwon't\b/g, "will not")
+    .replace(/\b(is|are|was|were|do|does|did|can|could|should|would|will|have|has|had)n't\b/g, "$1 not")
     .replace(/[.,!?;:'"()[\]{}]/g, "")
     .replace(/\s+/g, " ");
 }

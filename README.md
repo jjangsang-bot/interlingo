@@ -24,6 +24,8 @@ Implemented:
 - Local travel review session with 10 sample questions
 - Korean prompts, English answer input, progressive hints, answer reveal, grading, and next-question flow
 - Local answer grading with normalization, fuzzy matching, and partial-answer feedback
+- Session completion summary with totals, accuracy, learned sentences, wrong sentences, user answers, and recommended answers
+- localStorage learning history for saved sessions, dashboard stats, recent sessions, streaks, and dev reset
 - Review scheduling utility
 - Answer normalization utility
 - MVP package setup
