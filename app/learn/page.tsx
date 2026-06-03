@@ -17,9 +17,13 @@ import {
   updateSentenceReviewState
 } from "../../lib/learning-history";
 import {
+  AnswerMode,
+  getAnswerMode,
   getAnswersForLanguage,
   getDirectionLabel,
+  getMultipleChoiceOptions,
   getTranslation,
+  getWordOrderChunks,
   languageLabels,
   StudyDirection,
   studyDirections,
@@ -73,6 +77,7 @@ function createAttempt(params: {
   answer: string;
   direction: StudyDirection;
   question: TravelQuestion;
+  answerMode: AnswerMode;
   recommendedAnswer: string;
   result: LearningResult;
   similarity: number;
@@ -85,6 +90,7 @@ function createAttempt(params: {
     promptText: getTranslation(params.question, params.direction.source),
     promptLanguage: languageLabels[params.direction.source],
     targetLanguage: languageLabels[params.direction.target],
+    answerMode: params.answerMode,
     userAnswer: params.answer,
     recommendedAnswer: params.recommendedAnswer,
     result: params.result,
@@ -97,6 +103,8 @@ export default function LearnPage() {
     useState<TravelQuestion[]>(travelQuestions);
   const [questionIndex, setQuestionIndex] = useState(0);
   const [answer, setAnswer] = useState("");
+  const [selectedChoice, setSelectedChoice] = useState("");
+  const [selectedChunks, setSelectedChunks] = useState<string[]>([]);
   const [hintCount, setHintCount] = useState(0);
   const [result, setResult] = useState<Result>(null);
   const [evaluation, setEvaluation] = useState<AnswerEvaluation | null>(null);
@@ -107,10 +115,20 @@ export default function LearnPage() {
 
   const question = sessionQuestions[questionIndex];
   const direction = getDirectionForQuestion(questionIndex);
+  const answerMode = getAnswerMode(direction, questionIndex);
   const directionLabel = getDirectionLabel(direction);
   const promptText = getTranslation(question, direction.source);
   const targetAnswers = getAnswersForLanguage(question, direction.target);
   const targetHints = question.hints[direction.target];
+  const multipleChoiceOptions = getMultipleChoiceOptions(question, direction.target);
+  const wordOrderChunks = getWordOrderChunks(question, direction.target);
+  const currentAnswer =
+    answerMode === "multipleChoice"
+      ? selectedChoice
+      : answerMode === "wordOrder"
+        ? selectedChunks.join("")
+        : answer;
+  const canSubmit = currentAnswer.trim().length > 0;
   const isAnswered = result !== null;
 
   useEffect(() => {
@@ -139,14 +157,15 @@ export default function LearnPage() {
   function gradeAnswer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!answer.trim() || isAnswered) {
+    if (!canSubmit || isAnswered) {
       return;
     }
 
-    const nextEvaluation = evaluateAnswer(answer, targetAnswers);
+    const nextEvaluation = evaluateAnswer(currentAnswer, targetAnswers);
     const sentenceId = createSentenceId(CATEGORY, question.id);
     const nextAttempt: LearnedSentenceRecord = createAttempt({
-      answer,
+      answer: currentAnswer,
+      answerMode,
       direction,
       question,
       recommendedAnswer: nextEvaluation.matchedAnswer,
@@ -172,7 +191,8 @@ export default function LearnPage() {
     if (!isAnswered) {
       const sentenceId = createSentenceId(CATEGORY, question.id);
       const nextAttempt: LearnedSentenceRecord = createAttempt({
-        answer,
+        answer: currentAnswer,
+        answerMode,
         direction,
         question,
         recommendedAnswer: targetAnswers[0],
@@ -198,10 +218,20 @@ export default function LearnPage() {
 
     setQuestionIndex((index) => index + 1);
     setAnswer("");
+    setSelectedChoice("");
+    setSelectedChunks([]);
     setHintCount(0);
     setResult(null);
     setEvaluation(null);
     setCurrentAttempt(null);
+  }
+
+  function selectWordChunk(chunk: string) {
+    setSelectedChunks((chunks) => [...chunks, chunk]);
+  }
+
+  function removeLastWordChunk() {
+    setSelectedChunks((chunks) => chunks.slice(0, -1));
   }
 
   if (isComplete) {
@@ -369,15 +399,77 @@ export default function LearnPage() {
           <label className="text-sm font-semibold" htmlFor="answer">
             {languageLabels[direction.target]}로 답해 보세요
           </label>
-          <textarea
-            autoFocus
-            className="mt-3 min-h-28 w-full resize-none rounded-md border border-black/15 bg-white p-4 text-base leading-relaxed outline-none transition focus:border-mint focus:ring-2 focus:ring-mint/20 disabled:bg-black/5"
-            disabled={isAnswered}
-            id="answer"
-            onChange={(event) => setAnswer(event.target.value)}
-            placeholder={`${languageLabels[direction.target]} 문장을 입력하세요`}
-            value={answer}
-          />
+
+          {answerMode === "typing" && (
+            <textarea
+              autoFocus
+              className="mt-3 min-h-28 w-full resize-none rounded-md border border-black/15 bg-white p-4 text-base leading-relaxed outline-none transition focus:border-mint focus:ring-2 focus:ring-mint/20 disabled:bg-black/5"
+              disabled={isAnswered}
+              id="answer"
+              onChange={(event) => setAnswer(event.target.value)}
+              placeholder={`${languageLabels[direction.target]} 문장을 입력하세요`}
+              value={answer}
+            />
+          )}
+
+          {answerMode === "multipleChoice" && (
+            <div className="mt-3 space-y-2">
+              {multipleChoiceOptions.map((option) => (
+                <button
+                  className={`w-full rounded-md border p-3 text-left text-sm font-semibold transition ${
+                    selectedChoice === option
+                      ? "border-mint bg-mint/10 text-mint"
+                      : "border-black/10 bg-white"
+                  }`}
+                  disabled={isAnswered}
+                  key={option}
+                  onClick={() => setSelectedChoice(option)}
+                  type="button"
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {answerMode === "wordOrder" && (
+            <div className="mt-3 space-y-3">
+              <div className="min-h-16 rounded-md border border-black/15 bg-white p-3 text-base font-semibold leading-relaxed">
+                {selectedChunks.length > 0 ? (
+                  selectedChunks.join("")
+                ) : (
+                  <span className="text-sm font-normal text-black/40">
+                    아래 조각을 순서대로 선택하세요
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {wordOrderChunks.map((chunk, index) => (
+                  <button
+                    className="rounded-md border border-black/10 bg-white px-3 py-2 text-sm font-semibold shadow-sm disabled:opacity-30"
+                    disabled={
+                      isAnswered ||
+                      selectedChunks.filter((selected) => selected === chunk).length >=
+                        wordOrderChunks.filter((candidate) => candidate === chunk).length
+                    }
+                    key={`${chunk}-${index}`}
+                    onClick={() => selectWordChunk(chunk)}
+                    type="button"
+                  >
+                    {chunk}
+                  </button>
+                ))}
+              </div>
+              <button
+                className="text-xs font-semibold text-black/45 underline decoration-black/20 underline-offset-4 disabled:opacity-30"
+                disabled={isAnswered || selectedChunks.length === 0}
+                onClick={removeLastWordChunk}
+                type="button"
+              >
+                마지막 조각 지우기
+              </button>
+            </div>
+          )}
 
           <div className="mt-3 grid grid-cols-2 gap-2">
             <button
@@ -412,7 +504,7 @@ export default function LearnPage() {
           {!isAnswered && (
             <button
               className="mt-6 h-12 w-full rounded-md bg-mint text-sm font-bold text-white shadow-sm disabled:opacity-40"
-              disabled={!answer.trim()}
+              disabled={!canSubmit}
               type="submit"
             >
               채점하기
@@ -452,10 +544,10 @@ export default function LearnPage() {
                 문자열 유사도 {Math.round(evaluation.similarity * 100)}%
               </p>
             )}
-            {answer && (
+            {currentAnswer && (
               <div className="mt-4">
                 <p className="text-xs font-semibold text-black/50">나의 답</p>
-                <p className="mt-1 text-sm leading-relaxed">{answer}</p>
+                <p className="mt-1 text-sm leading-relaxed">{currentAnswer}</p>
               </div>
             )}
             <div className="mt-4">

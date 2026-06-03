@@ -1,5 +1,7 @@
 export type LearningResult = "correct" | "partial" | "wrong" | "revealed";
 
+export type LearningMode = "recognition" | "recall" | "production";
+
 export type LearnedSentenceRecord = {
   sentenceId: string;
   questionId: number;
@@ -8,6 +10,7 @@ export type LearnedSentenceRecord = {
   promptText: string;
   promptLanguage: string;
   targetLanguage: string;
+  answerMode: string;
   userAnswer: string;
   recommendedAnswer: string;
   result: LearningResult;
@@ -44,12 +47,18 @@ export type SentenceReviewState = {
 
 export const LEARNING_HISTORY_KEY = "interlingo.learningHistory.v1";
 export const SENTENCE_REVIEW_STATE_KEY = "interlingo.sentenceReviewState.v1";
+export const LEARNING_MODE_KEY = "interlingo.learningMode.v1";
 const LEARNING_HISTORY_EVENT = "interlingo-learning-history-change";
 const REVIEW_INTERVAL_DAYS = [1, 3, 7, 14];
+const DEFAULT_LEARNING_MODE: LearningMode = "recall";
+const EMPTY_HISTORY: LearningSessionRecord[] = [];
+const EMPTY_REVIEW_STATES: Record<string, SentenceReviewState> = {};
 let cachedHistoryRaw: string | null = null;
-let cachedHistory: LearningSessionRecord[] = [];
+let cachedHistory: LearningSessionRecord[] = EMPTY_HISTORY;
 let cachedReviewStatesRaw: string | null = null;
-let cachedReviewStates: Record<string, SentenceReviewState> = {};
+let cachedReviewStates: Record<string, SentenceReviewState> = EMPTY_REVIEW_STATES;
+let cachedLearningModeRaw: string | null = null;
+let cachedLearningMode: LearningMode = DEFAULT_LEARNING_MODE;
 
 export function getTodayKey(now = new Date()) {
   const year = now.getFullYear();
@@ -94,7 +103,7 @@ export function createLearningSessionRecord(params: {
 
 export function loadLearningHistory() {
   if (typeof window === "undefined") {
-    return [];
+    return getLearningHistoryServerSnapshot();
   }
 
   try {
@@ -102,8 +111,8 @@ export function loadLearningHistory() {
 
     if (!rawHistory) {
       cachedHistoryRaw = null;
-      cachedHistory = [];
-      return [];
+      cachedHistory = EMPTY_HISTORY;
+      return cachedHistory;
     }
 
     if (rawHistory === cachedHistoryRaw) {
@@ -119,8 +128,50 @@ export function loadLearningHistory() {
 
     return cachedHistory;
   } catch {
-    return [];
+    cachedHistoryRaw = null;
+    cachedHistory = EMPTY_HISTORY;
+    return cachedHistory;
   }
+}
+
+export function getLearningHistoryServerSnapshot() {
+  return EMPTY_HISTORY;
+}
+
+export function loadLearningMode() {
+  if (typeof window === "undefined") {
+    return getLearningModeServerSnapshot();
+  }
+
+  const rawMode = window.localStorage.getItem(LEARNING_MODE_KEY);
+
+  if (rawMode === cachedLearningModeRaw) {
+    return cachedLearningMode;
+  }
+
+  cachedLearningModeRaw = rawMode;
+  cachedLearningMode = isLearningMode(rawMode)
+    ? rawMode
+    : DEFAULT_LEARNING_MODE;
+
+  return cachedLearningMode;
+}
+
+export function getLearningModeServerSnapshot() {
+  return DEFAULT_LEARNING_MODE;
+}
+
+export function saveLearningMode(mode: LearningMode) {
+  if (typeof window === "undefined") {
+    return DEFAULT_LEARNING_MODE;
+  }
+
+  window.localStorage.setItem(LEARNING_MODE_KEY, mode);
+  cachedLearningModeRaw = mode;
+  cachedLearningMode = mode;
+  notifyLearningHistoryChanged();
+
+  return mode;
 }
 
 export function saveLearningSession(session: LearningSessionRecord) {
@@ -140,6 +191,10 @@ export function clearLearningHistory() {
 
   window.localStorage.removeItem(LEARNING_HISTORY_KEY);
   window.localStorage.removeItem(SENTENCE_REVIEW_STATE_KEY);
+  cachedHistoryRaw = null;
+  cachedHistory = EMPTY_HISTORY;
+  cachedReviewStatesRaw = null;
+  cachedReviewStates = EMPTY_REVIEW_STATES;
   notifyLearningHistoryChanged();
 }
 
@@ -163,6 +218,10 @@ function notifyLearningHistoryChanged() {
   }
 
   window.dispatchEvent(new Event(LEARNING_HISTORY_EVENT));
+}
+
+function isLearningMode(mode: string | null): mode is LearningMode {
+  return mode === "recognition" || mode === "recall" || mode === "production";
 }
 
 export function calculateLearningStreak(history: LearningSessionRecord[]) {
@@ -234,7 +293,7 @@ export function createSentenceId(category: string, questionId: number) {
 
 export function loadSentenceReviewStates() {
   if (typeof window === "undefined") {
-    return {};
+    return getSentenceReviewStatesServerSnapshot();
   }
 
   try {
@@ -242,8 +301,8 @@ export function loadSentenceReviewStates() {
 
     if (!rawStates) {
       cachedReviewStatesRaw = null;
-      cachedReviewStates = {};
-      return {};
+      cachedReviewStates = EMPTY_REVIEW_STATES;
+      return cachedReviewStates;
     }
 
     if (rawStates === cachedReviewStatesRaw) {
@@ -259,8 +318,14 @@ export function loadSentenceReviewStates() {
 
     return cachedReviewStates;
   } catch {
-    return {};
+    cachedReviewStatesRaw = null;
+    cachedReviewStates = EMPTY_REVIEW_STATES;
+    return cachedReviewStates;
   }
+}
+
+export function getSentenceReviewStatesServerSnapshot() {
+  return EMPTY_REVIEW_STATES;
 }
 
 export function getTodayReviewCount(

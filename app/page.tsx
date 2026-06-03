@@ -6,11 +6,17 @@ import {
   calculateLearningStreak,
   clearLearningHistory,
   getCategoryAccuracies,
+  getLearningHistoryServerSnapshot,
+  getLearningModeServerSnapshot,
+  getSentenceReviewStatesServerSnapshot,
   getTodayReviewCount,
+  loadLearningMode,
   loadSentenceReviewStates,
   loadLearningHistory,
+  saveLearningMode,
   subscribeLearningHistory
 } from "../lib/learning-history";
+import type { LearningMode } from "../lib/learning-history";
 
 const categories = ["일상생활", "여행", "음식", "비즈니스", "취미"];
 
@@ -20,16 +26,60 @@ const fallbackWeakAreas = [
   { category: "여행", accuracy: 92, totalCount: 0 }
 ];
 
+const learningModeOptions: {
+  mode: LearningMode;
+  title: string;
+  description: string;
+}[] = [
+  {
+    mode: "recognition",
+    title: "Recognition",
+    description: "보기에서 알아보기"
+  },
+  {
+    mode: "recall",
+    title: "Recall",
+    description: "떠올려 답하기"
+  },
+  {
+    mode: "production",
+    title: "Production",
+    description: "직접 만들어 말하기"
+  }
+];
+
+function subscribeClientHydration() {
+  return () => {};
+}
+
+function getClientHydrationSnapshot() {
+  return true;
+}
+
+function getServerHydrationSnapshot() {
+  return false;
+}
+
 export default function HomePage() {
   const history = useSyncExternalStore(
     subscribeLearningHistory,
     loadLearningHistory,
-    () => []
+    getLearningHistoryServerSnapshot
   );
   const reviewStates = useSyncExternalStore(
     subscribeLearningHistory,
     loadSentenceReviewStates,
-    () => ({})
+    getSentenceReviewStatesServerSnapshot
+  );
+  const learningMode = useSyncExternalStore(
+    subscribeLearningHistory,
+    loadLearningMode,
+    getLearningModeServerSnapshot
+  );
+  const isLearningModeHydrated = useSyncExternalStore(
+    subscribeClientHydration,
+    getClientHydrationSnapshot,
+    getServerHydrationSnapshot
   );
 
   const todayReviewCount = getTodayReviewCount(reviewStates);
@@ -73,6 +123,39 @@ export default function HomePage() {
           문장별 nextReviewAt이 오늘이거나 지난 문장을 복습 대상으로 계산합니다.
         </p>
       </section>
+
+      {isLearningModeHydrated && (
+        <section className="border-b border-black/10 py-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-bold">학습 모드</h2>
+            <span className="text-sm text-black/50">localStorage</span>
+          </div>
+          <div className="mt-4 grid gap-2">
+            {learningModeOptions.map((option) => {
+              const isSelected = learningMode === option.mode;
+
+              return (
+                <button
+                  className={`rounded-md border p-4 text-left shadow-sm transition ${
+                    isSelected
+                      ? "border-mint bg-mint/10 text-ink"
+                      : "border-black/10 bg-white text-black/70"
+                  }`}
+                  key={option.mode}
+                  onClick={() => saveLearningMode(option.mode)}
+                  type="button"
+                >
+                  <span className="block text-sm font-bold">{option.title}</span>
+                  <span className="mt-1 block text-xs">{option.description}</span>
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-3 text-xs text-black/50">
+            이번 단계에서는 선택값만 저장하고, 실제 학습 페이지 로직은 그대로 유지합니다.
+          </p>
+        </section>
+      )}
 
       <section className="border-b border-black/10 py-6">
         <div className="flex items-center justify-between">

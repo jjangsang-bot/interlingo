@@ -28,6 +28,7 @@ Implemented:
 - localStorage learning history for saved sessions, dashboard stats, recent sessions, streaks, and dev reset
 - localStorage sentence review states with forgetting-curve intervals and due-first practice
 - Multilingual interleaving practice across Korean, English, and Japanese directions
+- Japanese target questions use lower-friction answer modes: multiple choice and word order
 - Review scheduling utility
 - Answer normalization utility
 - MVP package setup
