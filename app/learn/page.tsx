@@ -9,6 +9,7 @@ import {
 import {
   createLearningSessionRecord,
   createSentenceId,
+  getTodayKey,
   isReviewDue,
   LearnedSentenceRecord,
   LearningResult,
@@ -39,6 +40,12 @@ type Result = "correct" | "partial" | "wrong" | "revealed" | null;
 
 const CATEGORY = "여행";
 
+const modeReportItems = [
+  { answerMode: "multipleChoice", label: "쉬움" },
+  { answerMode: "wordOrder", label: "보통" },
+  { answerMode: "typing", label: "어려움" }
+];
+
 function getResultLabel(result: LearningResult) {
   if (result === "correct") {
     return "정답";
@@ -53,6 +60,58 @@ function getResultLabel(result: LearningResult) {
   }
 
   return "오답";
+}
+
+function getModeLabel(answerMode: string) {
+  return modeReportItems.find((item) => item.answerMode === answerMode)?.label ?? "기타";
+}
+
+function getAccuracy(attempts: LearnedSentenceRecord[]) {
+  if (attempts.length === 0) {
+    return 0;
+  }
+
+  const correctCount = attempts.filter((attempt) => attempt.result === "correct").length;
+
+  return Math.round((correctCount / attempts.length) * 100);
+}
+
+function getModeReport(attempts: LearnedSentenceRecord[]) {
+  return modeReportItems.map((item) => {
+    const modeAttempts = attempts.filter(
+      (attempt) => attempt.answerMode === item.answerMode
+    );
+
+    return {
+      ...item,
+      totalCount: modeAttempts.length,
+      accuracy: getAccuracy(modeAttempts)
+    };
+  });
+}
+
+function getFutureDateKey(daysFromToday: number) {
+  const date = new Date();
+
+  date.setDate(date.getDate() + daysFromToday);
+
+  return getTodayKey(date);
+}
+
+function getReviewScheduleSummary(attempts: LearnedSentenceRecord[]) {
+  const reviewStates = loadSentenceReviewStates();
+  const sentenceIds = new Set(attempts.map((attempt) => attempt.sentenceId));
+
+  return [
+    { label: "내일 복습 예정", date: getFutureDateKey(1), count: 0 },
+    { label: "3일 후 복습 예정", date: getFutureDateKey(3), count: 0 },
+    { label: "7일 후 복습 예정", date: getFutureDateKey(7), count: 0 }
+  ].map((item) => ({
+    ...item,
+    count: Object.values(reviewStates).filter(
+      (state) => sentenceIds.has(state.sentenceId) && state.nextReviewAt === item.date
+    ).length
+  }));
 }
 
 function selectSessionQuestions(
@@ -102,6 +161,8 @@ function createAttempt(params: {
     sentenceId: createSentenceId(CATEGORY, params.question.id),
     questionId: params.question.id,
     korean: params.question.korean,
+    english: params.question.english,
+    japanese: params.question.japanese,
     directionLabel: getDirectionLabel(params.direction),
     promptText: getTranslation(params.question, params.direction.source),
     promptLanguage: languageLabels[params.direction.source],
@@ -273,17 +334,19 @@ export default function LearnPage() {
       attempts: sessionAttempts
     });
     const wrongAttempts = sessionRecord.wrongSentences;
+    const modeReport = getModeReport(sessionAttempts);
+    const reviewSchedule = getReviewScheduleSummary(sessionAttempts);
 
     return (
       <main className="mx-auto flex min-h-screen w-full max-w-md flex-col bg-paper px-5 py-6 text-ink">
         <header className="border-b border-black/10 pb-4">
           <p className="text-sm font-semibold text-mint">InterLingo</p>
-          <h1 className="mt-1 text-2xl font-bold">복습 완료</h1>
+          <h1 className="mt-1 text-2xl font-bold">오늘의 학습 리포트</h1>
         </header>
 
         <section className="py-6">
           <p className="text-sm font-semibold text-plum">{CATEGORY} · 인터리빙</p>
-          <p className="mt-2 text-lg font-bold">오늘의 복습을 마쳤습니다.</p>
+          <p className="mt-2 text-lg font-bold">오늘 배운 표현을 한눈에 정리했습니다.</p>
 
           <div className="mt-5 grid grid-cols-2 gap-2">
             <div className="rounded-md border border-black/10 bg-white p-4 shadow-sm">
@@ -309,7 +372,42 @@ export default function LearnPage() {
           </div>
 
           <section className="mt-8">
-            <h2 className="text-base font-bold">오늘 배운 문장</h2>
+            <h2 className="text-base font-bold">모드별 결과</h2>
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              {modeReport.map((item) => (
+                <article
+                  className="rounded-md border border-black/10 bg-white p-3 text-center shadow-sm"
+                  key={item.answerMode}
+                >
+                  <p className="text-sm font-bold">{item.label}</p>
+                  <p className="mt-2 text-xl font-bold text-mint">{item.totalCount}</p>
+                  <p className="text-xs text-black/50">풀이 수</p>
+                  <p className="mt-2 text-xs font-semibold text-plum">
+                    정답률 {item.accuracy}%
+                  </p>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="mt-8">
+            <h2 className="text-base font-bold">복습 예정 요약</h2>
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              {reviewSchedule.map((item) => (
+                <article
+                  className="rounded-md border border-black/10 bg-white p-3 text-center shadow-sm"
+                  key={item.label}
+                >
+                  <p className="text-xs font-semibold text-black/50">{item.label}</p>
+                  <p className="mt-2 text-2xl font-bold text-plum">{item.count}</p>
+                  <p className="text-xs text-black/45">문장</p>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="mt-8">
+            <h2 className="text-base font-bold">오늘 배운 표현</h2>
             <div className="mt-3 space-y-3">
               {sessionAttempts.map((attempt, index) => (
                 <article
@@ -331,11 +429,22 @@ export default function LearnPage() {
                     </p>
                   </div>
                   <p className="mt-3 text-xs font-semibold text-plum">
-                    {attempt.directionLabel}
+                    {attempt.directionLabel} · {getModeLabel(attempt.answerMode)}
                   </p>
-                  <p className="mt-1 text-sm font-bold leading-relaxed">
-                    {attempt.promptText}
-                  </p>
+                  <div className="mt-3 space-y-2 rounded-md bg-black/5 p-3 text-sm leading-relaxed">
+                    <p>
+                      <span className="font-semibold text-black/50">한국어</span>{" "}
+                      {attempt.korean}
+                    </p>
+                    <p>
+                      <span className="font-semibold text-black/50">영어</span>{" "}
+                      {attempt.english}
+                    </p>
+                    <p>
+                      <span className="font-semibold text-black/50">일본어</span>{" "}
+                      {attempt.japanese}
+                    </p>
+                  </div>
                   <div className="mt-3 space-y-2 text-sm leading-relaxed">
                     <div>
                       <p className="text-xs font-semibold text-black/50">사용자 답</p>
@@ -357,7 +466,7 @@ export default function LearnPage() {
           </section>
 
           <section className="mt-8">
-            <h2 className="text-base font-bold">틀린 문장</h2>
+            <h2 className="text-base font-bold">틀린 문제 다시 보기</h2>
             <div className="mt-3 space-y-3">
               {wrongAttempts.length === 0 ? (
                 <p className="rounded-md border border-mint/20 bg-mint/10 p-4 text-sm font-semibold text-mint">
@@ -372,9 +481,20 @@ export default function LearnPage() {
                     <p className="text-xs font-semibold text-plum">
                       {attempt.directionLabel}
                     </p>
-                    <p className="mt-1 text-sm font-bold leading-relaxed">
-                      {attempt.promptText}
-                    </p>
+                    <div className="mt-3 space-y-1 text-sm leading-relaxed">
+                      <p>
+                        <span className="font-semibold text-black/50">한국어</span>{" "}
+                        {attempt.korean}
+                      </p>
+                      <p>
+                        <span className="font-semibold text-black/50">영어</span>{" "}
+                        {attempt.english}
+                      </p>
+                      <p>
+                        <span className="font-semibold text-black/50">일본어</span>{" "}
+                        {attempt.japanese}
+                      </p>
+                    </div>
                     <div className="mt-3 space-y-2 text-sm leading-relaxed">
                       <div>
                         <p className="text-xs font-semibold text-black/50">사용자 답</p>

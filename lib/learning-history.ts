@@ -6,6 +6,8 @@ export type LearnedSentenceRecord = {
   sentenceId: string;
   questionId: number;
   korean: string;
+  english: string;
+  japanese: string;
   directionLabel: string;
   promptText: string;
   promptLanguage: string;

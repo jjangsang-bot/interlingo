@@ -33,18 +33,18 @@ const learningModeOptions: {
 }[] = [
   {
     mode: "recognition",
-    title: "Recognition",
-    description: "보기에서 알아보기"
+    title: "쉬움",
+    description: "보기 중 정답 고르기"
   },
   {
     mode: "recall",
-    title: "Recall",
-    description: "떠올려 답하기"
+    title: "보통",
+    description: "조각을 순서대로 배열하기"
   },
   {
     mode: "production",
-    title: "Production",
-    description: "직접 만들어 말하기"
+    title: "어려움",
+    description: "직접 입력하기"
   }
 ];
 
