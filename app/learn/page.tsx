@@ -28,7 +28,7 @@ import {
   getDirectionLabel,
   getMultipleChoiceOptions,
   getTranslation,
-  getWordOrderChunks,
+  getWordOrderChunkOptions,
   languageLabels,
   StudyDirection,
   studyDirections,
@@ -37,6 +37,12 @@ import {
 } from "../../lib/travel-questions";
 
 type Result = "correct" | "partial" | "wrong" | "revealed" | null;
+
+type SelectedChunk = {
+  chunk: string;
+  index: number;
+  isDistractor: boolean;
+};
 
 const CATEGORY = "여행";
 
@@ -181,7 +187,7 @@ export default function LearnPage() {
   const [questionIndex, setQuestionIndex] = useState(0);
   const [answer, setAnswer] = useState("");
   const [selectedChoice, setSelectedChoice] = useState("");
-  const [selectedChunks, setSelectedChunks] = useState<string[]>([]);
+  const [selectedChunks, setSelectedChunks] = useState<SelectedChunk[]>([]);
   const [hintCount, setHintCount] = useState(0);
   const [result, setResult] = useState<Result>(null);
   const [evaluation, setEvaluation] = useState<AnswerEvaluation | null>(null);
@@ -215,13 +221,19 @@ export default function LearnPage() {
   const targetAnswers = getAnswersForLanguage(question, direction.target);
   const targetHints = question.hints[direction.target];
   const multipleChoiceOptions = getMultipleChoiceOptions(question, direction.target);
-  const wordOrderChunks = getWordOrderChunks(question, direction.target);
+  const wordOrderChunkOptions = getWordOrderChunkOptions(question, direction.target);
   const currentAnswer =
     answerMode === "multipleChoice"
       ? selectedChoice
       : answerMode === "wordOrder"
-        ? combineWordOrderChunks(selectedChunks, direction.target)
+        ? combineWordOrderChunks(
+            selectedChunks.map((selectedChunk) => selectedChunk.chunk),
+            direction.target
+          )
         : answer;
+  const hasSelectedDistractor = selectedChunks.some(
+    (selectedChunk) => selectedChunk.isDistractor
+  );
   const canSubmit = currentAnswer.trim().length > 0;
   const isAnswered = result !== null;
 
@@ -255,7 +267,13 @@ export default function LearnPage() {
       return;
     }
 
-    const nextEvaluation = evaluateAnswer(currentAnswer, targetAnswers);
+    const nextEvaluation: AnswerEvaluation = hasSelectedDistractor
+      ? {
+          matchedAnswer: targetAnswers[0],
+          result: "wrong",
+          similarity: 0
+        }
+      : evaluateAnswer(currentAnswer, targetAnswers);
     const sentenceId = createSentenceId(CATEGORY, question.id);
     const nextAttempt: LearnedSentenceRecord = createAttempt({
       answer: currentAnswer,
@@ -320,12 +338,18 @@ export default function LearnPage() {
     setCurrentAttempt(null);
   }
 
-  function selectWordChunk(chunk: string) {
-    setSelectedChunks((chunks) => [...chunks, chunk]);
+  function selectWordChunk(
+    chunk: string,
+    index: number,
+    isDistractor: boolean
+  ) {
+    setSelectedChunks((chunks) => [...chunks, { chunk, index, isDistractor }]);
   }
 
-  function removeLastWordChunk() {
-    setSelectedChunks((chunks) => chunks.slice(0, -1));
+  function removeSelectedWordChunk(index: number) {
+    setSelectedChunks((chunks) =>
+      chunks.filter((selectedChunk) => selectedChunk.index !== index)
+    );
   }
 
   if (isComplete) {
@@ -428,9 +452,26 @@ export default function LearnPage() {
                       {getResultLabel(attempt.result)}
                     </p>
                   </div>
-                  <p className="mt-3 text-xs font-semibold text-plum">
-                    {attempt.directionLabel} · {getModeLabel(attempt.answerMode)}
-                  </p>
+                  <div className="mt-3 grid grid-cols-2 gap-2 rounded-md border border-plum/10 bg-plum/5 p-3 text-xs">
+                    <div>
+                      <p className="font-semibold text-black/50">출제 방향</p>
+                      <p className="mt-1 font-bold text-plum">
+                        {attempt.directionLabel}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-black/50">정답 여부</p>
+                      <p className="mt-1 font-bold text-plum">
+                        {getResultLabel(attempt.result)}
+                      </p>
+                    </div>
+                    <div className="col-span-2">
+                      <p className="font-semibold text-black/50">학습 모드</p>
+                      <p className="mt-1 font-bold text-plum">
+                        {getModeLabel(attempt.answerMode)}
+                      </p>
+                    </div>
+                  </div>
                   <div className="mt-3 space-y-2 rounded-md bg-black/5 p-3 text-sm leading-relaxed">
                     <p>
                       <span className="font-semibold text-black/50">한국어</span>{" "}
@@ -595,7 +636,19 @@ export default function LearnPage() {
             <div className="mt-3 space-y-3">
               <div className="min-h-16 rounded-md border border-black/15 bg-white p-3 text-base font-semibold leading-relaxed">
                 {selectedChunks.length > 0 ? (
-                  combineWordOrderChunks(selectedChunks, direction.target)
+                  <div className="flex flex-wrap gap-2">
+                    {selectedChunks.map((selectedChunk) => (
+                      <button
+                        className="rounded-md bg-mint/10 px-3 py-2 text-sm font-bold text-mint"
+                        disabled={isAnswered}
+                        key={`${selectedChunk.chunk}-${selectedChunk.index}`}
+                        onClick={() => removeSelectedWordChunk(selectedChunk.index)}
+                        type="button"
+                      >
+                        {selectedChunk.chunk}
+                      </button>
+                    ))}
+                  </div>
                 ) : (
                   <span className="text-sm font-normal text-black/40">
                     아래 조각을 순서대로 선택하세요
@@ -603,30 +656,28 @@ export default function LearnPage() {
                 )}
               </div>
               <div className="flex flex-wrap gap-2">
-                {wordOrderChunks.map((chunk, index) => (
+                {wordOrderChunkOptions.map((option, index) => (
                   <button
                     className="rounded-md border border-black/10 bg-white px-3 py-2 text-sm font-semibold shadow-sm disabled:opacity-30"
                     disabled={
                       isAnswered ||
-                      selectedChunks.filter((selected) => selected === chunk).length >=
-                        wordOrderChunks.filter((candidate) => candidate === chunk).length
+                      selectedChunks.some(
+                        (selectedChunk) => selectedChunk.index === index
+                      )
                     }
-                    key={`${chunk}-${index}`}
-                    onClick={() => selectWordChunk(chunk)}
+                    key={`${option.chunk}-${index}`}
+                    onClick={() =>
+                      selectWordChunk(option.chunk, index, option.isDistractor)
+                    }
                     type="button"
                   >
-                    {chunk}
+                    {option.chunk}
                   </button>
                 ))}
               </div>
-              <button
-                className="text-xs font-semibold text-black/45 underline decoration-black/20 underline-offset-4 disabled:opacity-30"
-                disabled={isAnswered || selectedChunks.length === 0}
-                onClick={removeLastWordChunk}
-                type="button"
-              >
-                마지막 조각 지우기
-              </button>
+              <p className="text-xs text-black/45">
+                선택한 조각을 다시 누르면 해당 조각만 제거됩니다.
+              </p>
             </div>
           )}
 

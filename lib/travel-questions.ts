@@ -18,6 +18,11 @@ export type TravelQuestion = {
   wordOrder?: Partial<Record<LanguageCode, string[]>>;
 };
 
+export type WordOrderChunkOption = {
+  chunk: string;
+  isDistractor: boolean;
+};
+
 export const languageLabels: Record<LanguageCode, string> = {
   ko: "한국어",
   en: "영어",
@@ -301,12 +306,27 @@ export function getWordOrderChunks(
   question: TravelQuestion,
   language: LanguageCode
 ) {
-  const chunks = question.wordChunks?.[language] ?? question.wordOrder?.[language] ?? createWordOrderChunks(
-    getTranslation(question, language),
-    language
-  );
+  return getWordOrderChunkOptions(question, language).map((option) => option.chunk);
+}
 
-  return shuffleWordOrderChunks(chunks, question.id + language.charCodeAt(0));
+export function getWordOrderChunkOptions(
+  question: TravelQuestion,
+  language: LanguageCode
+) {
+  const chunks = getBaseWordOrderChunks(question, language);
+  const seed = hashChunk(`${question.id}-${language}`, question.id + language.charCodeAt(0));
+  const distractorChunks = getAutomaticDistractorChunks(
+    question,
+    language,
+    chunks,
+    seed
+  );
+  const options = [
+    ...chunks.map((chunk) => ({ chunk, isDistractor: false })),
+    ...distractorChunks.map((chunk) => ({ chunk, isDistractor: true }))
+  ];
+
+  return shuffleWordOrderChunkOptions(options, seed);
 }
 
 export function combineWordOrderChunks(
@@ -328,14 +348,60 @@ function createWordOrderChunks(sentence: string, language: LanguageCode) {
   return sentence.match(/\S+/g) ?? [sentence];
 }
 
+function getBaseWordOrderChunks(
+  question: TravelQuestion,
+  language: LanguageCode
+) {
+  return question.wordChunks?.[language] ?? question.wordOrder?.[language] ?? createWordOrderChunks(
+    getTranslation(question, language),
+    language
+  );
+}
+
+function getAutomaticDistractorChunks(
+  question: TravelQuestion,
+  language: LanguageCode,
+  answerChunks: string[],
+  seed: number
+) {
+  const answerChunkSet = new Set(answerChunks.map(normalizeChunkKey));
+  const candidates = travelQuestions
+    .filter((candidate) => candidate.id !== question.id)
+    .flatMap((candidate) => getBaseWordOrderChunks(candidate, language))
+    .filter((chunk) => !answerChunkSet.has(normalizeChunkKey(chunk)));
+  const uniqueCandidates = Array.from(
+    new Map(candidates.map((chunk) => [normalizeChunkKey(chunk), chunk])).values()
+  );
+  const distractorCount = Math.min(
+    uniqueCandidates.length,
+    1 + (seed % 3)
+  );
+
+  return shuffleWordOrderChunks(uniqueCandidates, seed + 17).slice(0, distractorCount);
+}
+
+function normalizeChunkKey(chunk: string) {
+  return chunk.trim().toLowerCase();
+}
+
 function shuffleWordOrderChunks(chunks: string[], seed: number) {
-  return chunks
-    .map((chunk, index) => ({
-      chunk,
-      rank: hashChunk(`${chunk}-${index}`, seed)
+  return shuffleWordOrderChunkOptions(
+    chunks.map((chunk) => ({ chunk, isDistractor: false })),
+    seed
+  ).map((item) => item.chunk);
+}
+
+function shuffleWordOrderChunkOptions(
+  options: WordOrderChunkOption[],
+  seed: number
+) {
+  return options
+    .map((option, index) => ({
+      ...option,
+      rank: hashChunk(`${option.chunk}-${index}`, seed)
     }))
     .sort((left, right) => left.rank - right.rank)
-    .map((item) => item.chunk);
+    .map(({ rank, ...option }) => option);
 }
 
 function hashChunk(value: string, seed: number) {
