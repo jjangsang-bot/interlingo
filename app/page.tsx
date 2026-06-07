@@ -3,14 +3,20 @@
 import Link from "next/link";
 import { useSyncExternalStore } from "react";
 import {
-  calculateLearningStreak,
   clearLearningHistory,
   getCategoryAccuracies,
+  getAchievementsServerSnapshot,
   getLearningHistoryServerSnapshot,
   getLearningModeServerSnapshot,
+  getLearningStreakServerSnapshot,
+  getLearningXpServerSnapshot,
   getSentenceReviewStatesServerSnapshot,
   getTodayReviewCount,
+  getXpProgress,
+  loadAchievements,
   loadLearningMode,
+  loadLearningStreakState,
+  loadLearningXpState,
   loadSentenceReviewStates,
   loadLearningHistory,
   saveLearningMode,
@@ -76,6 +82,21 @@ export default function HomePage() {
     loadLearningMode,
     getLearningModeServerSnapshot
   );
+  const streakState = useSyncExternalStore(
+    subscribeLearningHistory,
+    loadLearningStreakState,
+    getLearningStreakServerSnapshot
+  );
+  const achievements = useSyncExternalStore(
+    subscribeLearningHistory,
+    loadAchievements,
+    getAchievementsServerSnapshot
+  );
+  const xpState = useSyncExternalStore(
+    subscribeLearningHistory,
+    loadLearningXpState,
+    getLearningXpServerSnapshot
+  );
   const isLearningModeHydrated = useSyncExternalStore(
     subscribeClientHydration,
     getClientHydrationSnapshot,
@@ -83,11 +104,11 @@ export default function HomePage() {
   );
 
   const todayReviewCount = getTodayReviewCount(reviewStates);
-  const streak = calculateLearningStreak(history);
   const categoryAccuracies = getCategoryAccuracies(history);
   const weakAreas =
     categoryAccuracies.length > 0 ? categoryAccuracies : fallbackWeakAreas;
   const recentSessions = history.slice(0, 3);
+  const xpProgress = getXpProgress(xpState);
 
   function resetHistory() {
     clearLearningHistory();
@@ -101,9 +122,39 @@ export default function HomePage() {
           <h1 className="mt-1 text-2xl font-bold">오늘의 회상 학습</h1>
         </div>
         <div className="rounded-full border border-coral/30 bg-coral/10 px-3 py-1 text-sm font-semibold text-coral">
-          {streak}일
+          🔥 {streakState.currentStreak}일 연속 학습
         </div>
       </header>
+
+      <Link
+        className="mt-4 flex h-11 items-center justify-center rounded-md border border-plum/20 bg-white text-sm font-bold text-plum shadow-sm"
+        href="/stats"
+      >
+        학습 통계 보기
+      </Link>
+
+      <section className="border-b border-black/10 py-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold text-plum">레벨</p>
+            <h2 className="mt-1 text-2xl font-bold">Lv{xpState.currentLevel}</h2>
+          </div>
+          <p className="text-sm font-bold text-mint">{xpState.totalXp} XP</p>
+        </div>
+        <div className="mt-4 h-3 overflow-hidden rounded-full bg-black/10">
+          <div
+            className="h-full rounded-full bg-mint transition-all"
+            style={{ width: `${xpProgress.progressPercent}%` }}
+          />
+        </div>
+        <p className="mt-2 text-xs text-black/50">
+          {xpProgress.nextLevelXp
+            ? `Lv${xpProgress.nextLevel}까지 ${
+                xpProgress.nextLevelXp - xpState.totalXp
+              } XP 남음`
+            : "최고 레벨에 도달했습니다."}
+        </p>
+      </section>
 
       <section className="border-b border-black/10 py-6">
         <p className="text-sm font-semibold text-plum">오늘의 복습</p>
@@ -197,6 +248,39 @@ export default function HomePage() {
               )}
             </div>
           ))}
+        </div>
+      </section>
+
+      <section className="border-b border-black/10 py-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-bold">획득 배지</h2>
+          <span className="text-sm text-black/50">{achievements.length}개</span>
+        </div>
+        <div className="mt-4 space-y-2">
+          {achievements.length === 0 ? (
+            <p className="rounded-md border border-black/10 bg-white p-4 text-sm text-black/60 shadow-sm">
+              아직 획득한 배지가 없습니다. 첫 학습을 완료하면 배지가 열립니다.
+            </p>
+          ) : (
+            achievements.map((achievement) => (
+              <article
+                className="rounded-md border border-mint/20 bg-mint/10 p-4 shadow-sm"
+                key={achievement.id}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-bold">{achievement.title}</p>
+                    <p className="mt-1 text-xs text-black/60">
+                      {achievement.description}
+                    </p>
+                  </div>
+                  <p className="text-xs font-semibold text-mint">
+                    {achievement.earnedAt}
+                  </p>
+                </div>
+              </article>
+            ))
+          )}
         </div>
       </section>
 
