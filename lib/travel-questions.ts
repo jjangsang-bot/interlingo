@@ -14,6 +14,7 @@ export type TravelQuestion = {
   japanese: string;
   answerAlternatives?: Partial<Record<LanguageCode, string[]>>;
   hints: Record<LanguageCode, string[]>;
+  wordChunks?: Partial<Record<LanguageCode, string[]>>;
   wordOrder?: Partial<Record<LanguageCode, string[]>>;
 };
 
@@ -48,6 +49,10 @@ export const travelQuestions: TravelQuestion[] = [
       en: ["airport", "How do I get to ...?", "How do I get to the a..."],
       ja: ["空港", "どうやって行きますか", "空港までど..."]
     },
+    wordChunks: {
+      ko: ["공항까지", "어떻게", "가나요?"],
+      en: ["How do I", "get to", "the airport?"]
+    },
     wordOrder: {
       ja: ["空港まで", "どうやって", "行きますか？"]
     }
@@ -67,6 +72,10 @@ export const travelQuestions: TravelQuestion[] = [
       en: ["check in, hotel", "I would like to + verb", "I would like to check i..."],
       ja: ["ホテル, チェックイン", "〜したいです", "ホテルにチェック..."]
     },
+    wordChunks: {
+      ko: ["호텔에", "체크인하고", "싶습니다."],
+      en: ["I would like to", "check in", "at the hotel."]
+    },
     wordOrder: {
       ja: ["ホテルに", "チェックイン", "したいです。"]
     }
@@ -84,6 +93,10 @@ export const travelQuestions: TravelQuestion[] = [
       ko: ["기차, 서울역", "정차하나요?", "이 기차는 서..."],
       en: ["train, stop, Seoul Station", "Does this + noun + verb at ...?", "Does this train stop at S..."],
       ja: ["電車, ソウル駅", "停まりますか", "この電車はソ..."]
+    },
+    wordChunks: {
+      ko: ["이 기차는", "서울역에", "정차하나요?"],
+      en: ["Does this train", "stop at", "Seoul Station?"]
     },
     wordOrder: {
       ja: ["この電車は", "ソウル駅に", "停まりますか？"]
@@ -104,6 +117,10 @@ export const travelQuestions: TravelQuestion[] = [
       en: ["window seat", "A + noun, please.", "A window s..."],
       ja: ["窓側の席", "お願いします", "窓側の..."]
     },
+    wordChunks: {
+      ko: ["창가 좌석으로", "부탁드립니다."],
+      en: ["A window seat,", "please."]
+    },
     wordOrder: {
       ja: ["窓側の席を", "お願いします。"]
     }
@@ -122,6 +139,10 @@ export const travelQuestions: TravelQuestion[] = [
       ko: ["근처, 식당", "있나요?", "근처에 좋은..."],
       en: ["restaurant, nearby", "Is there a + noun + nearby?", "Is there a good r..."],
       ja: ["近く, レストラン", "ありますか", "近くに良い..."]
+    },
+    wordChunks: {
+      ko: ["근처에", "좋은 식당이", "있나요?"],
+      en: ["Is there", "a good restaurant", "nearby?"]
     },
     wordOrder: {
       ja: ["近くに", "良いレストランは", "ありますか？"]
@@ -142,6 +163,10 @@ export const travelQuestions: TravelQuestion[] = [
       en: ["take, picture", "Could you + verb + a picture of me?", "Could you take a p..."],
       ja: ["写真", "撮っていただけますか", "写真を撮..."]
     },
+    wordChunks: {
+      ko: ["사진을", "찍어", "주시겠어요?"],
+      en: ["Could you", "take a picture", "of me?"]
+    },
     wordOrder: {
       ja: ["写真を", "撮って", "いただけますか？"]
     }
@@ -160,6 +185,10 @@ export const travelQuestions: TravelQuestion[] = [
       en: ["how long, museum, from here", "How long does it take to get to ...?", "How long does it take to get to the m..."],
       ja: ["ここから, 博物館", "どのくらいかかりますか", "ここから博..."]
     },
+    wordChunks: {
+      ko: ["여기서", "박물관까지", "얼마나 걸리나요?"],
+      en: ["How long does it take", "to get to", "the museum", "from here?"]
+    },
     wordOrder: {
       ja: ["ここから", "博物館まで", "どのくらい", "かかりますか？"]
     }
@@ -177,6 +206,10 @@ export const travelQuestions: TravelQuestion[] = [
       ko: ["표, 취소", "할 수 있나요?", "이 표를 취..."],
       en: ["cancel, ticket", "Can I + verb + this noun?", "Can I cancel this t..."],
       ja: ["チケット, キャンセル", "できますか", "このチケットを..."]
+    },
+    wordChunks: {
+      ko: ["이 표를", "취소할 수", "있나요?"],
+      en: ["Can I", "cancel", "this ticket?"]
     },
     wordOrder: {
       ja: ["このチケットを", "キャンセル", "できますか？"]
@@ -197,6 +230,10 @@ export const travelQuestions: TravelQuestion[] = [
       en: ["Wi-Fi, password", "What is the + noun?", "What is the Wi-Fi p..."],
       ja: ["Wi-Fi, パスワード", "何ですか", "Wi-Fiのパ..."]
     },
+    wordChunks: {
+      ko: ["와이파이 비밀번호가", "무엇인가요?"],
+      en: ["What is", "the Wi-Fi password?"]
+    },
     wordOrder: {
       ja: ["Wi-Fiの", "パスワードは", "何ですか？"]
     }
@@ -215,6 +252,10 @@ export const travelQuestions: TravelQuestion[] = [
       ko: ["짐, 맡기다", "할 수 있을까요?", "짐을 잠시..."],
       en: ["leave, luggage, for a while", "Can I leave my + noun + here for a while?", "Can I leave my l..."],
       ja: ["荷物, 預ける", "てもいいですか", "荷物をしば..."]
+    },
+    wordChunks: {
+      ko: ["짐을", "잠시", "맡길 수 있을까요?"],
+      en: ["Can I", "leave my luggage", "here", "for a while?"]
     },
     wordOrder: {
       ja: ["荷物を", "しばらく", "預けても", "いいですか？"]
@@ -260,7 +301,51 @@ export function getWordOrderChunks(
   question: TravelQuestion,
   language: LanguageCode
 ) {
-  return question.wordOrder?.[language] ?? [getTranslation(question, language)];
+  const chunks = question.wordChunks?.[language] ?? question.wordOrder?.[language] ?? createWordOrderChunks(
+    getTranslation(question, language),
+    language
+  );
+
+  return shuffleWordOrderChunks(chunks, question.id + language.charCodeAt(0));
+}
+
+export function combineWordOrderChunks(
+  chunks: string[],
+  language: LanguageCode
+) {
+  if (language === "ja") {
+    return chunks.join("");
+  }
+
+  return chunks.join(" ").replace(/\s+([.,?!])/g, "$1");
+}
+
+function createWordOrderChunks(sentence: string, language: LanguageCode) {
+  if (language === "ja") {
+    return [sentence];
+  }
+
+  return sentence.match(/\S+/g) ?? [sentence];
+}
+
+function shuffleWordOrderChunks(chunks: string[], seed: number) {
+  return chunks
+    .map((chunk, index) => ({
+      chunk,
+      rank: hashChunk(`${chunk}-${index}`, seed)
+    }))
+    .sort((left, right) => left.rank - right.rank)
+    .map((item) => item.chunk);
+}
+
+function hashChunk(value: string, seed: number) {
+  let hash = seed;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) % 9973;
+  }
+
+  return hash;
 }
 
 export function getMultipleChoiceOptions(

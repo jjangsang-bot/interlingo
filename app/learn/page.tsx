@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   AnswerEvaluation,
   evaluateAnswer
@@ -12,12 +12,16 @@ import {
   isReviewDue,
   LearnedSentenceRecord,
   LearningResult,
+  getLearningModeServerSnapshot,
+  loadLearningMode,
   loadSentenceReviewStates,
   saveLearningSession,
+  subscribeLearningHistory,
   updateSentenceReviewState
 } from "../../lib/learning-history";
 import {
   AnswerMode,
+  combineWordOrderChunks,
   getAnswerMode,
   getAnswersForLanguage,
   getDirectionLabel,
@@ -73,6 +77,18 @@ function getDirectionForQuestion(index: number) {
   return studyDirections[index % studyDirections.length];
 }
 
+function subscribeClientHydration() {
+  return () => {};
+}
+
+function getClientHydrationSnapshot() {
+  return true;
+}
+
+function getServerHydrationSnapshot() {
+  return false;
+}
+
 function createAttempt(params: {
   answer: string;
   direction: StudyDirection;
@@ -112,10 +128,27 @@ export default function LearnPage() {
   const [sessionAttempts, setSessionAttempts] = useState<LearnedSentenceRecord[]>([]);
   const [isComplete, setIsComplete] = useState(false);
   const hasSavedSession = useRef(false);
+  const learningMode = useSyncExternalStore(
+    subscribeLearningHistory,
+    loadLearningMode,
+    getLearningModeServerSnapshot
+  );
+  const isLearningModeHydrated = useSyncExternalStore(
+    subscribeClientHydration,
+    getClientHydrationSnapshot,
+    getServerHydrationSnapshot
+  );
 
   const question = sessionQuestions[questionIndex];
   const direction = getDirectionForQuestion(questionIndex);
-  const answerMode = getAnswerMode(direction, questionIndex);
+  const answerMode =
+    learningMode === "recognition"
+      ? "multipleChoice"
+      : learningMode === "recall"
+        ? "wordOrder"
+        : learningMode === "production"
+          ? "typing"
+          : getAnswerMode(direction, questionIndex);
   const directionLabel = getDirectionLabel(direction);
   const promptText = getTranslation(question, direction.source);
   const targetAnswers = getAnswersForLanguage(question, direction.target);
@@ -126,7 +159,7 @@ export default function LearnPage() {
     answerMode === "multipleChoice"
       ? selectedChoice
       : answerMode === "wordOrder"
-        ? selectedChunks.join("")
+        ? combineWordOrderChunks(selectedChunks, direction.target)
         : answer;
   const canSubmit = currentAnswer.trim().length > 0;
   const isAnswered = result !== null;
@@ -400,7 +433,13 @@ export default function LearnPage() {
             {languageLabels[direction.target]}로 답해 보세요
           </label>
 
-          {answerMode === "typing" && (
+          {!isLearningModeHydrated && (
+            <div className="mt-3 rounded-md border border-black/10 bg-white p-4 text-sm text-black/50 shadow-sm">
+              저장된 학습 모드를 불러오는 중입니다.
+            </div>
+          )}
+
+          {isLearningModeHydrated && answerMode === "typing" && (
             <textarea
               autoFocus
               className="mt-3 min-h-28 w-full resize-none rounded-md border border-black/15 bg-white p-4 text-base leading-relaxed outline-none transition focus:border-mint focus:ring-2 focus:ring-mint/20 disabled:bg-black/5"
@@ -412,7 +451,7 @@ export default function LearnPage() {
             />
           )}
 
-          {answerMode === "multipleChoice" && (
+          {isLearningModeHydrated && answerMode === "multipleChoice" && (
             <div className="mt-3 space-y-2">
               {multipleChoiceOptions.map((option) => (
                 <button
@@ -432,11 +471,11 @@ export default function LearnPage() {
             </div>
           )}
 
-          {answerMode === "wordOrder" && (
+          {isLearningModeHydrated && answerMode === "wordOrder" && (
             <div className="mt-3 space-y-3">
               <div className="min-h-16 rounded-md border border-black/15 bg-white p-3 text-base font-semibold leading-relaxed">
                 {selectedChunks.length > 0 ? (
-                  selectedChunks.join("")
+                  combineWordOrderChunks(selectedChunks, direction.target)
                 ) : (
                   <span className="text-sm font-normal text-black/40">
                     아래 조각을 순서대로 선택하세요
@@ -474,7 +513,11 @@ export default function LearnPage() {
           <div className="mt-3 grid grid-cols-2 gap-2">
             <button
               className="h-11 rounded-md border border-plum/30 bg-plum/10 text-sm font-bold text-plum disabled:opacity-40"
-              disabled={hintCount === targetHints.length || isAnswered}
+              disabled={
+                !isLearningModeHydrated ||
+                hintCount === targetHints.length ||
+                isAnswered
+              }
               onClick={showHint}
               type="button"
             >
@@ -482,7 +525,7 @@ export default function LearnPage() {
             </button>
             <button
               className="h-11 rounded-md border border-coral/30 bg-coral/10 text-sm font-bold text-coral disabled:opacity-40"
-              disabled={isAnswered}
+              disabled={!isLearningModeHydrated || isAnswered}
               onClick={revealAnswer}
               type="button"
             >
@@ -504,7 +547,7 @@ export default function LearnPage() {
           {!isAnswered && (
             <button
               className="mt-6 h-12 w-full rounded-md bg-mint text-sm font-bold text-white shadow-sm disabled:opacity-40"
-              disabled={!canSubmit}
+              disabled={!isLearningModeHydrated || !canSubmit}
               type="submit"
             >
               채점하기
